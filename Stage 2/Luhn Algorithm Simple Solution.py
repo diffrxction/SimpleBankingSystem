@@ -54,3 +54,40 @@ while True:
     else:
         print("Bye!")
         exit()
+#OR
+#Second Solution
+
+import random
+customers = {}
+while True:
+    option = int(input ("1. Create an account\n2. Log into account\n0. Exit\n"))
+    if option == 1:
+        card = '400000' + f'{random.randrange(1, 10**9):09}'
+        clist = [ x for x in card]
+        for x, y in enumerate(clist):
+            if x % 2 == 0:
+                clist[x] = int(y) * 2 if int(y)*2 < 9 else int(y)*2-9
+        clist = list(map(int, clist))
+        csum = 0 if sum(clist)%10 == 0 else 10 - sum(clist)%10
+        card = card + str(csum)
+        pin = f'{random.randrange(1, 10**4):04}'
+        customers[card] = {'PIN': pin, 'Balance': 0}
+        print (f"Your card has been created\nYour card number:\n{card}\nYour card PIN:\n{pin}")
+    elif option == 2:
+        cnum = input("Enter your card number:\n")
+        pnum = input("Enter your PIN:\n")
+        if cnum in customers and customers[cnum]['PIN'] == pnum:
+            print("You have successfully logged in!\n")
+            while True:
+                aoption = int(input("1. Balance\n2. Log out\n0. Exit"))
+                if aoption == 1:
+                    print(customers[card]['Balance'])
+                elif aoption == 2:
+                    print("You have successfully logged out!")
+                    exit()
+                else:
+                    exit()
+        else:
+            print("Wrong card number or PIN!")
+    else:
+        exit()
