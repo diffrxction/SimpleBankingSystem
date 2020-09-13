@@ -1,253 +1,354 @@
-from collections import namedtuple
-#from functions import generate_account_number, generate_pin, generate_card_number
-#from account import Account
-import sqlite3
-import sys
-import random
-#from functions import check_card
+from __future__ import annotations
+from abc import ABC, abstractmethod
+from secrets import randbelow
 
-#Remove the above there #s for implementing as a three file system. acccounts.py, banking.py, fsmmenus.py
+# ---------------------------- account_manager.py ----------------------------
+class BankAccount:
+    """
+    This class handles all bank account transactions within itself. The rationale for this setup is that
+    in an actual banking app you would not want to pass around account details for security reasons.
+    The class methods handle creating new accounts, login/logout, retrieving information
+    from the account to display, and account storage.
+    The instance methods handle checking login credentials within each account and displaying account information.
+    """
+    # class constants
+    MII = '4'
+    BIN = MII + '00000'
+    ACCT_DIGITS = 9
+    PIN_DIGITS = 4
 
-# Account class contains all the information of the bank account
-class Account:
-    # Create objects
-    def __init__(self, con, cur, data):
-        self.id = data.id
-        self.card = data.card
-        self.pin = data.pin
-        self.balance = data.balance
-        # Load global variables connection and cursor passed from Bank class
-        global connection, cursor
-        connection = con
-        cursor = cur
+    # class variables
+    __acct_store = {}
+    __current_acct = None
 
-    # Display account menu
-    def account_menu(self):
-        # Menu options to display
-        options = ["1. Balance", "2. Add income", "3. Do transfer", "4. Close account", "5. Log out", "0. Exit"]
-        # Function for each of menu options
-        functions = {"1": self.print_balance, "2": self.add_income, "3": self.transfer_money, "4": self.close_account,
-                     "5": self.log_out, "0": exit}
-        print("", *options, sep="\n")  # Print menu
-        choice = input(">").strip()  # Get user input
-        # Call function according to user choice from the list
-        if choice not in functions.keys():
-            print("This option does not exist.\nPlease try again")
-            return self.account_menu()  # Get the account menu again
-        else:
-            functions[choice]()
-
-    # Function updates balance and prints it out
-    def print_balance(self):
-        # Get the balance of the account from the database
-        cursor.execute('select balance from card where id = ?', (self.id, ))
-        self.balance = cursor.fetchone()[0]  # Update account's balance
-        print('Balance:', self.balance)  # Print it out to the console
-        return self.account_menu()  # Load account menu after completion
-
-    # Function asks user for amount of money to add to the balance of the account
-    def add_income(self):
-        print("Enter income:")
-        income = input(">").strip()  # Get user input
-        if income.isdigit() and int(income) > 0:  # Check that input contains only digits
-            self.set_balance(int(income) + self.balance)  # Update balance
-            print("Income was added!")
-        else:
-            print("Incorrect amount!")
-        return self.account_menu()  # Load account menu after completion
-
-    # Function changes balance and update info in the database
-    def set_balance(self, balance):
-        self.balance = balance  # Update balance
-        # Pass updated balance to the database
-        cursor.execute('update card set balance = ? where id = ?', (balance, self.id))
-        connection.commit()
-
-    # Function asks user for amount and card number to transfer, then transfers amount between accounts
-    def transfer_money(self):
-        print("Transfer:", "Enter card number:", sep="\n")
-        card = input(">").strip()  # Get card number
-        if len(card) == 16 and card.isdigit() and check_card(card):  # Check if card number is correct
-            if card != self.card:  # Check that it's not the same account
-                other_id = self.get_account_id(card)  # Get other account from the database by card number
-                if other_id:  # If account was found
-                    other_id = other_id[0]  # Get the other account's id
-                    print("Enter how much money you want to transfer:")  # Ask user for amount of money to transfer
-                    amount = input(">").strip()
-                    if amount.isdigit() and int(amount) > 0:  # Check that amount of money contains only digits
-                        amount = int(amount)
-                        if amount <= self.balance:  # Check that account has enough fund to transfer
-                            self.balance -= amount  # Remove funds from the account
-                            # Update balance int he database
-                            cursor.execute('update card set balance = ? where id = ?', (self.balance, self.id))
-                            # Add fund to the other account
-                            cursor.execute('update card set balance = balance + (?) where id = ?', (amount, other_id))
-                            connection.commit()
-                            print("Success!")
-                        else:
-                            print("Not enough money!")
-                    else:
-                        print("Incorrect amount!")
-                else:
-                    print("Such a card does not exist.")
-            else:
-                print("You can't transfer money to the same account!")
-        else:
-            print("Probably you made mistake in the card number. Please try again!")
-        return self.account_menu()
-
-    # Function return account's id if account is found in the database, otherwise returns None
-    def get_account_id(self, card):
-        cursor.execute("select id from card where number = ?", (card, ))
-        f = cursor.fetchone()
-        return f
-
-    # Function to close account and remove it from the database
-    def close_account(self):
-        cursor.execute('delete from card where id = ?', (self.id, ))
-        connection.commit()
-        print("The account has been closed!")
-
-    # Function to Log out and return to the bank menu
-    def log_out(self):
-        print("You have successfully logged out!")
-
-# Get global variables for connection
-global cursor, connection
-
-# Function returns true if card last digit has correct checksum number according to Luhn algorithm
-def check_card(card):
-    luhn_sum = luhn_algorithm(card[:-1])  # Pass the number through luhn algorithm without last digit
-    checksum = get_checksum(luhn_sum)  # Get correct checksum number based on Luhn algorithm
-    return checksum == int(card[-1])  # Check that last digit of the card matches correct checksum
-
-# Function exits program and closes SQL connection
-def exit():
-    print("\nBye!")
-    connection.close()
-    sys.exit()  # Close program
-
-# Function returns new card number from account number parameter
-def generate_card_number(acc_number):
-    iin = "400000"  # IIN given by the assignment
-    luhn_sum = luhn_algorithm(iin + acc_number)  # Calculate Luhn sum
-    checksum = get_checksum(luhn_sum)  # Get checksum
-    return iin + acc_number + str(checksum)  # Return 16-digit card number as a string
-
-# Generate 9-digit account number
-def generate_account_number():
-    acc_number = ""
-    for _ in range(9):
-        acc_number += str(random.randrange(10))
-    return acc_number
-
-# Function takes Luhn sum as a parameter and returns checksum
-def get_checksum(luhn_sum):
-    # Check sum added to the luhn sum must return round number
-    return 10 - luhn_sum % 10 if luhn_sum % 10 != 0 else 0
-
-# Function returns Luhn sum based on 15-digit number
-def luhn_algorithm(card_number):
-    card_number = list(map(int, card_number))  # Create a list of integers from the string
-    for i, _ in enumerate(card_number, 1):
-        # Multiply each odd digit by 2
-        if i % 2 != 0:
-            card_number[i - 1] *= 2
-        # Subtract 9 from any digit bigger than 9
-        if card_number[i - 1] > 9:
-            card_number[i - 1] -= 9
-    return sum(card_number)  # Return sum
-
-# Function returns a random generated 4-digit pin-code as a string
-def generate_pin():
-    pin = ""
-    for _ in range(4):
-        pin += str(random.randrange(10))
-    return pin
-
-# Bank class
-class Bank:
-    # Create tuple for handling SQL query
-    Account = namedtuple('Account', 'id, card, pin, balance')
-
-    # Init function
+    # ======== setup new Card Account methods ========
     def __init__(self):
-        # Create global variables for SQL and establish connection to database
-        global cursor, connection
-        connection = sqlite3.connect('card.s3db')
-        cursor = connection.cursor()
-        # Create a table in database if it does not exist already
-        cursor.executescript('create table if not exists card(' +
-                            'id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,' +
-                            'number TEXT NOT NULL,' +
-                            'pin TEXT NOT NULL,' +
-                            'balance INTEGER NOT NULL DEFAULT 0' +
-                            ')')
-        connection.commit()
-        # Show main Menu
-        self.main_menu()
+        """
+        Initializes a unique card account, displays login info for first time, and sets starting balance
+        """
+        self.__account_number = self.__generate_acct_number()
+        self.__account_pin = self.__generate_pin()
+        self.card_number = BankAccount.BIN + self.__account_number \
+            + self.__calculate_checksum(BankAccount.BIN + self.__account_number)
+        self.__balance = 0
+        self.__display_login_info()
 
-    # Function to print main menu
-    def main_menu(self):
-        options = ["1. Create an account", "2. Log into account", "0. Exit"]  # Menu options to display
-        functions = {"1": self.new_account, "2": self.log_in, "0": exit}  # Function for each of menu options
-        print("", *options, sep="\n")  # Print menu
-        choice = input(">").strip()  # Get user input
-        # Call function according to user choice from the list
-        if choice not in functions.keys():
-            print("This option does not exist.\nPlease try again")
+    @classmethod
+    def __generate_acct_number(cls) -> str:
+        """
+        Returns a random unique account number
+        """
+        duplicate = True  # prime the while loop
+        temp_acct = None
+        while duplicate:
+            temp_acct = str(randbelow(10 ** cls.ACCT_DIGITS)).zfill(cls.ACCT_DIGITS)
+            duplicate = cls.retrieve(temp_acct)  # if an account with that number already exists, generate another
+        return temp_acct
+
+    @classmethod
+    def __generate_pin(cls) -> str:
+        """
+        Returns a random pin code
+        """
+        return str(randbelow(10 ** cls.PIN_DIGITS)).zfill(cls.PIN_DIGITS)
+
+    @classmethod
+    def __calculate_checksum(cls, acct_number) -> str:
+        """
+        Returns a calculated checksum for the card account, based on the Luhn algorithm
+        """
+        number = list(acct_number)
+        step_1 = [int(x) * 2 if i % 2 == 0 else int(x) for (i, x) in enumerate(number)]
+        step_2 = [x - 9 if x > 9 else x for x in step_1]
+        step_3 = 10 - sum(int(num) for num in step_2) % 10
+        if step_3 == 10:
+            step_3 = 0
+        return str(step_3)
+
+    @classmethod
+    def validate_card(cls, card_number) -> bool:
+        this_card = list(str(card_number))
+        account, checksum = this_card[:-1], this_card[-1]
+        return cls.__calculate_checksum(account) == checksum
+
+    @classmethod
+    def new_account(cls):
+        new_card = BankAccount()
+        BankAccount.__acct_store[new_card.card_number] = new_card
+
+    def __check_pin(self, pin_number):
+        return self.__account_pin == pin_number
+
+    # ======== Card Account Display methods ========
+    def __card_display(self):
+        """Displays formatted card number with spaces"""
+        return ''.join([(each_number if (i == 0 or i % 4 != 0) else ' ' + each_number)
+                        for i, each_number in enumerate(self.card_number)])
+
+    def __display_login_info(self):
+        """Displays login info / only used after initial account creation"""
+        print(f'\nYour card has been created\n'
+              f'Your card number:\n'
+              # f'{self.__card_display()}\n'   # uncomment this line and comment out line below for pretty display
+              f'{self.card_number}\n'
+              f'Your card PIN:\n'
+              f'{self.__account_pin}\n', )
+
+    # ======== Card Account Access methods ========
+    @classmethod
+    def login(cls) -> bool:
+        print('\nEnter your card number:')
+        login_card = input()
+        print('Enter your PIN:')
+        login_pin = input()
+
+        this_acct = cls.retrieve(login_card)
+        # remember: if there is no account matching login card number, fail; otherwise, check for matching pin
+        if this_acct and this_acct.__check_pin(login_pin):
+            cls.__current_acct = this_acct
+            print('\nYou have successfully logged in!\n')
         else:
-            functions[choice]()
-        return self.main_menu()  # Load menu again after completion
+            print('\nWrong card number or PIN!\n')
 
-    # Function to log in to an account
-    def log_in(self):
-        print("Enter your card number:")
-        card_number = input(">").strip()  # Get card number
-        if card_number.isdigit():  # Check that input contains only digits
-            print("Enter your PIN:")
-            pin = input(">").strip()  # Get pin number
-            if pin.isdigit():  # Check that input contains only digits
-                account = self.get_account(card_number, pin)  # Get account from the database
-                if account:  # If account is found
-                    account = Account(connection, cursor, account)  # Create new instance of class Account
-                    print("You have successfully logged in!")
-                    account.account_menu()  # Load account menu
-                    return
-        print("Wrong card number or PIN!")
+        return cls.is_logged_in()
 
-    # Function to create new account
-    def new_account(self):
-        print("\nYour card has been created")
-        accounts = self.get_all_accounts()  # Get a dictionary of all accounts
-        while True:
-            new_number = generate_account_number()  # Generate new account number
-            card = generate_card_number(new_number)  # Generate new card number
-            if card not in accounts.keys():  # Make sure that new card number is unique
-                break
-        pin = generate_pin()  # Generate new pin number
-        print("Your card number:", card, "Your card PIN:", pin, sep="\n")  # Print new account information
-        cursor.execute("insert into card(number, pin) values (?, ?) ", (card, pin))  # Add new card and pin to database
-        connection.commit()
+    @classmethod
+    def logout(cls):
+        cls.__current_acct = None
+        cls.__logged_in = False
+        print('\nYou have successfully logged out!\n')
 
-    # Function returns dictionary with card numbers as keys and pins as their values
-    def get_all_accounts(self):
-        accounts = {}  # Create empty dictionary
-        cursor.execute('select * from card')  # Get all accounts from the database
-        for acc in map(self.Account._make, cursor.fetchall()):
-            accounts[acc.card] = acc.pin  # Add pair to the dictionary as ("card number": "pin")
-        return accounts  # Return the dictionary
+    @classmethod
+    def is_logged_in(cls) -> bool:
+        return cls.__current_acct is not None
 
-    # Function returns named tuple of account from the database if account exist or None otherwise
-    def get_account(self, account_numb, pin):
-        # Request query with card number and pin
-        cursor.execute("select * from card where number = ? and pin = ?", (account_numb, pin))
-        f = cursor.fetchone()
-        return self.Account._make(f) if f else None  # Return named tuple Account(id, card, pin, balance) or None
+    @classmethod
+    def retrieve(cls, account):
+        """
+        Returns the requested account or False
+        This method is used by both the login function where it returns the account if login is successful,
+        and when generating a new card account number where a False return means there isn't already
+        an account with that number and it's okay to accept the new card number
+        """
+        requested_acct = None
+        try:
+            requested_acct = BankAccount.__acct_store[account]
+        except KeyError:
+            return False
+        finally:
+            return requested_acct
 
-# Main Function
-def main():
-    bank = Bank()
+    def __get_balance(self):
+        """
+        Gets balance of the currently logged-in account
+        """
+        return self.__balance
+
+    def __transaction(self, amount):
+        self.__balance += amount
+
+    @classmethod
+    def show_balance(cls):
+        """
+        Show balance if logged in
+        """
+        if cls.is_logged_in():
+            print(f'\nBalance: {cls.__current_acct.__get_balance()}\n')
+
+    @classmethod
+    def deposit(cls):
+        """
+        Deposits amount into current account
+        Not (yet?) used in project. I set this up for testing account information
+        """
+        # if cls.is_logged_in():
+        #     amount = int(input('How much do you want to deposit?: '))
+        #     if amount >= 0:
+        #         cls.__current_acct.__transaction(amount)
+        #     else:
+        #         print('deposit error')
+
+    @classmethod
+    def withdrawal(cls):
+        """
+        Withdraws amount from current account
+        Not (yet?) used in project. I set this up for testing account information
+        """
+        # if cls.is_logged_in():
+        #     amount = int(input('How much do you want to withdraw?: '))
+        #     if amount >= 0:
+        #         cls.__current_acct.__transaction(-amount)
+        #     else:
+        #         print('withdrawal error')
+
+
+# ---------------------------- fsm_menus.py ----------------------------
+""""
+The classes within this file are a Finite State Machine.
+They control the menu system and what behavior the program uses for each menu option.
+"""
+
+
+class State(ABC):
+
+    def __init__(self):
+        self._context = None
+        self._menu_options = {}
+
+    @property
+    def context(self):
+        return self._context
+
+    @context.setter
+    def context(self, context) -> None:
+        self._context = context
+
+    @abstractmethod
+    def execute(self) -> None:
+        pass
+
+    def display_menu(self, menu, options):
+        print(menu)
+        request = input()
+        try:
+            options[request]()
+        except KeyError:
+            print('invalid entry\n')
+            self.context.transition_to(self)
+
+
+class MainMenu(State):
+    """
+    Main Menu state - controls functionality while Main Menu is active
+    This is the initial state of the program
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.menu = f'1. Create an account\n'\
+                    f'2. Log into account\n'\
+                    f'0. Exit'
+
+        self._menu_options = {'1': self.create_acct,
+                              '2': self.login_acct,
+                              '0': self.exit}
+
+    def execute(self) -> None:
+        self.display_menu(self.menu, self._menu_options)
+
+    def create_acct(self):
+        self.context.banking_app.create_account()
+
+    def login_acct(self):
+        if self.context.banking_app.login_account():
+            self.context.transition_to(AcctMenu())
+        else:
+            self.context.transition_to(MainMenu())
+
+    def exit(self):
+        self.context.banking_app.stop_app()
+
+
+class AcctMenu(State):
+    """
+    Account Menu state - controls functionality while Account Menu is active
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.menu = f'1. Balance\n'\
+                    f'2. Log out\n'\
+                    f'0. Exit'
+
+        self._menu_options = {'1': self.balance,
+                              '2': self.logout_acct,
+                              '0': self.exit}
+
+    def execute(self):
+        self.display_menu(self.menu, self._menu_options)
+
+    def balance(self):
+        self.context.banking_app.show_balance()
+
+    def logout_acct(self):
+        self.context.banking_app.logout_account()
+        self.context.transition_to(MainMenu())
+
+    def exit(self):
+        self.context.banking_app.stop_app()
+
+    # disabled for current project stage / used in testing functionality of accounts
+    # def deposit(self):
+    #     self._context.banking_app.deposit()
+
+    # def withdraw(self):
+    #     self._context.banking_app.withdraw()
+
+
+class Context(ABC):
+    """
+    This is context manager / Finite State Machine
+    It handles transitions between states and passes 'execute' through to the currently active state
+    """
+
+    def __init__(self, banking_app, state: State) -> None:
+        self.banking_app = banking_app
+        self._state = None
+        self.transition_to(state)
+
+    def transition_to(self, state: State):
+        self._state = state
+        self._state.context = self
+
+    def execute(self):
+        self._state.execute()
+
+
+# ---------------------------- banking.py ----------------------------
+class BankingApp:
+
+    # ======== Banking App Control methods ========
+    def __init__(self):
+        self.bank_mgr = BankAccount
+        self._context = Context(self, MainMenu())
+        self.__running = True
+
+    def is_running(self):
+        return self.__running
+
+    def run(self):
+        """Runs the BankingApp once it is created"""
+        while self.is_running():
+            self._context.execute()
+        print('\nBye!')
+
+    def stop_app(self):
+        # self.bank_mgr.logout()  # should log out any current account first
+        self.__running = False
+
+    # ======== Card Account Access methods ========
+    def create_account(self):
+        self.bank_mgr.new_account()
+
+    def login_account(self) -> bool:
+        return self.bank_mgr.login()
+
+    def logout_account(self):
+        return self.bank_mgr.logout()
+
+    def show_balance(self):
+        self.bank_mgr.show_balance()
+
+    def withdraw(self):
+        self.bank_mgr.withdrawal()
+
+    def deposit(self):
+        self.bank_mgr.deposit()
+
+    def is_logged_in(self) -> bool:
+        return self.bank_mgr.is_logged_in()
+
 
 if __name__ == '__main__':
-    main()
+    banker = BankingApp()
+    banker.run()
