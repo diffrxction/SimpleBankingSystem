@@ -5,9 +5,7 @@
 - [X] Start stage 2 of the project
 - [X] Complete stage 2
 - [X] Start stage 3 of the project
-- [ ] Complete stage 3 
-- [ ] Start stage 4 of the project
-- [ ] Complete stage 4. 
-- [ ] Start stage 5 of the project
-- [ ] Complete stage 5
+- [X] Complete stage 3 
+- [X] Start stage 4 of the project
+- [ ] Complete stage 4.
 - [ ] Project completed. 
