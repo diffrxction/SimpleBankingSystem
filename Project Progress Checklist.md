@@ -7,5 +7,5 @@
 - [X] Start stage 3 of the project
 - [X] Complete stage 3 
 - [X] Start stage 4 of the project
-- [ ] Complete stage 4.
-- [ ] Project completed. 
+- [X] Complete stage 4.
+- [X] Project completed. 
